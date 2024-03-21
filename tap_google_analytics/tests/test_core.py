@@ -7,6 +7,7 @@ import pytest
 from singer_sdk.testing import get_standard_tap_tests
 
 from tap_google_analytics.tap import TapGoogleAnalytics
+from tap_google_analytics.client import GoogleAnalyticsStream
 from tap_google_analytics.tests.utilities import get_secrets_dict
 
 SAMPLE_CONFIG_SERVICE = {
@@ -31,7 +32,7 @@ SAMPLE_CONFIG_CLIENT_SECRETS = {
         (SAMPLE_CONFIG_CLIENT_SECRETS),
     ],
 )
-# Run standard built-in tap tests from the SDK:
+Run standard built-in tap tests from the SDK:
 def test_standard_tap_tests(config, sample_config):
     """Run standard tap tests from the SDK."""
     tests = get_standard_tap_tests(TapGoogleAnalytics, config=sample_config)
@@ -51,3 +52,69 @@ def test_no_credentials():
         tap = TapGoogleAnalytics(config=SAMPLE_CONFIG_SERVICE2)
         tap.run_connection_test()
         assert e.value == "No valid credentials provided."
+
+
+def test_report_definition():
+    report = {
+        "dimensions": ["ga:date", "ga:country"],
+        "metrics": ["ga:sessions", "ga:sessionsPerUser", "ga:avgSessionDuration"],
+    }
+    definition = GoogleAnalyticsStream._generate_report_definition(report)
+
+    assert definition["dimensions"][0]["name"] == "ga:date"
+    assert definition["dimensions"][1]["name"] == "ga:country"
+
+    assert definition["metrics"][0]["expression"] == "ga:sessions"
+
+    assert len(definition.keys()) == 2
+    assert len(definition["dimensions"]) == 2
+    assert len(definition["metrics"]) == 3
+
+
+def test_report_definition_with_filters():
+    report = {
+        "dimensions": ["ga:date", "ga:country"],
+        "metrics": ["ga:sessions", "ga:sessionsPerUser", "ga:avgSessionDuration"],
+        "dimensionFilterClauses": {
+            "ga:country": {"operator": "EXACT", "expressions": ["United States"]}
+        },
+        "metricFilterClauses": {
+            "ga:pageviews": {"operator": "GREATER_THAN", "comparisonValue": "2"}
+        },
+        "orderBys": {"ga:sessions": "DESCENDING", "ga:pageviews": "DESCENDING"},
+    }
+
+    definition = GoogleAnalyticsStream._generate_report_definition(report)
+
+    assert definition["dimensions"][0]["name"] == "ga:date"
+    assert definition["dimensions"][1]["name"] == "ga:country"
+
+    assert definition["metrics"][0]["expression"] == "ga:sessions"
+
+    assert len(definition.keys()) == 5
+    assert len(definition["dimensions"]) == 2
+    assert len(definition["metrics"]) == 3
+    assert len(definition["orderBys"]) == 2
+    assert len(definition["dimensionFilterClauses"][0]["filters"]) == 1
+    assert len(definition["metricFilterClauses"][0]["filters"]) == 1
+
+    assert (
+        definition["dimensionFilterClauses"][0]["filters"][0]["dimensionName"]
+        == "ga:country"
+    )
+    assert definition["dimensionFilterClauses"][0]["filters"][0]["expressions"] == [
+        "United States"
+    ]
+    assert definition["dimensionFilterClauses"][0]["filters"][0]["operator"] == "EXACT"
+
+    assert (
+        definition["metricFilterClauses"][0]["filters"][0]["metricName"]
+        == "ga:pageviews"
+    )
+    assert definition["metricFilterClauses"][0]["filters"][0]["comparisonValue"] == "2"
+    assert (
+        definition["metricFilterClauses"][0]["filters"][0]["operator"] == "GREATER_THAN"
+    )
+
+    assert definition["orderBys"][0]["fieldName"] == "ga:sessions"
+    assert definition["orderBys"][0]["sortOrder"] == "DESCENDING"

@@ -1,5 +1,4 @@
 """Custom client handling, including GoogleAnalyticsStream base class."""
-"""Test 2"""
 
 import copy
 import socket
@@ -128,6 +127,32 @@ class GoogleAnalyticsStream(Stream):
             report_definition["segments"] = []
             for segment_id in report_def_raw["segments"]:
                 report_definition["segments"].append({"segmentId": segment_id})
+
+        for key in ["dimension", "metric"]:
+            if not f"{key}FilterClauses" in report_def_raw:
+                continue
+
+            filters = []
+
+            for clause in report_def_raw[f"{key}FilterClauses"].keys():
+                filters.append(
+                    {
+                        f"{key}Name": clause,
+                        **report_def_raw[f"{key}FilterClauses"][clause],
+                    }
+                )
+
+            report_definition[f"{key}FilterClauses"] = [{"filters": filters}]
+
+        if "orderBys" in report_def_raw:
+            report_definition["orderBys"] = []
+            for clause, sort_order in report_def_raw["orderBys"].items():
+                report_definition["orderBys"].append(
+                    {
+                        "fieldName": clause.replace("ga_", "ga:"),
+                        "sortOrder": sort_order,
+                    }
+                )
 
         return report_definition
 
@@ -316,8 +341,14 @@ class GoogleAnalyticsStream(Stream):
             ]
         }
 
-        if "segments" in report_definition:
-            body["reportRequests"][0]["segments"] = report_definition["segments"]
+        for key in [
+            "segments",
+            "dimensionFilterClauses",
+            "metricFilterClauses",
+            "orderBys",
+        ]:
+            if key in report_definition:
+                body["reportRequests"][0][key] = report_definition[key]
 
         return (
             self.analytics.reports()
