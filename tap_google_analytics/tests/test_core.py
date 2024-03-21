@@ -32,7 +32,7 @@ SAMPLE_CONFIG_CLIENT_SECRETS = {
         (SAMPLE_CONFIG_CLIENT_SECRETS),
     ],
 )
-Run standard built-in tap tests from the SDK:
+# Run standard built-in tap tests from the SDK:
 def test_standard_tap_tests(config, sample_config):
     """Run standard tap tests from the SDK."""
     tests = get_standard_tap_tests(TapGoogleAnalytics, config=sample_config)
