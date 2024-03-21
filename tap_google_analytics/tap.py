@@ -229,10 +229,10 @@ class TapGoogleAnalytics(Tap):
                 )
                 sys.exit(1)
 
-            if len(dimensions) > 7:
+            if len(dimensions) > 9:
                 self.logger.critical(
                     f"'{name}' has too many dimensions defined. GA reports \
-                    can have maximum 7 dimensions."
+                    can have maximum 9 dimensions."
                 )
                 sys.exit(1)
 
