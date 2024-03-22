@@ -273,7 +273,9 @@ class GoogleAnalyticsStream(Stream):
 
         if self.snake_case_cols:
             # https://stackoverflow.com/questions/1175208/elegant-python-function-to-convert-camelcase-to-snake-case
-            return ''.join(['_'+c.lower() if c.isupper() else c for c in colname]).lstrip('_')
+            return "".join(
+                ["_" + c.lower() if c.isupper() else c for c in colname]
+            ).lstrip("_")
 
         return colname
 
@@ -325,7 +327,7 @@ class GoogleAnalyticsStream(Stream):
                 # Also add the [start_date,end_date) used for the report
                 record["report_start_date"] = self.config.get("start_date")
                 record["report_end_date"] = self.end_date
-                
+
                 yield record
 
     @backoff.on_exception(
@@ -403,6 +405,7 @@ class GoogleAnalyticsStream(Stream):
         """
         properties: List[th.Property] = []
         primary_keys = []
+        primary_keys.append("view_id")
         # : List[th.StringType] = []
 
         # Track if there is a date set as one of the Dimensions
@@ -413,6 +416,7 @@ class GoogleAnalyticsStream(Stream):
             if dimension == "ga:date":
                 date_dimension_included = True
                 self.replication_key = "ga_date"
+
             data_type = self._lookup_data_type(
                 "dimension", dimension, self.dimensions_ref, self.metrics_ref
             )
@@ -431,7 +435,8 @@ class GoogleAnalyticsStream(Stream):
             metric = metric.replace("ga:", "ga_")
             properties.append(th.Property(metric, self._get_datatype(data_type)))
 
-        # Also add the {start_date, end_date} params for the report query
+        # Also add the {view_id, start_date, end_date} params for the report query
+        properties.append(th.Property("view_id", th.StringType(), required=True))
         properties.append(
             th.Property("report_start_date", th.StringType(), required=True)
         )
@@ -443,7 +448,7 @@ class GoogleAnalyticsStream(Stream):
         #  {start_date, end_date} params as keys
         if not date_dimension_included:
             self.logger.warn(
-                f"Incrmental sync not supported for stream {self.tap_stream_id}, \
+                f"Incremental sync not supported for stream {self.tap_stream_id}, \
                     'ga.date' is the only supported replication key at this time."
             )
             primary_keys.append("report_start_date")
