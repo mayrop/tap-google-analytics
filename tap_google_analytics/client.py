@@ -38,6 +38,7 @@ class GoogleAnalyticsStream(Stream):
         self.quota_user = self.config.get("quota_user", None)
         self.end_date = self._get_end_date()
         self.view_id = self.config["view_id"]
+        self.snake_case_cols = bool(self.config.get("snake_case_cols", False))
 
     def _get_end_date(self):
         end_date = self.config.get("end_date", datetime.utcnow().strftime("%Y-%m-%d"))
@@ -267,6 +268,15 @@ class GoogleAnalyticsStream(Stream):
         if report:
             return report[0].get("nextPageToken")
 
+    def _normalize_colname(self, colname: str) -> str:
+        colname = colname.replace("ga:", "ga_")
+
+        if self.snake_case_cols:
+            # https://stackoverflow.com/questions/1175208/elegant-python-function-to-convert-camelcase-to-snake-case
+            return ''.join(['_'+c.lower() if c.isupper() else c for c in colname]).lstrip('_')
+
+        return colname
+
     def _parse_response(self, response):
         report = response.get("reports", [])[0]
         if report:
@@ -278,6 +288,9 @@ class GoogleAnalyticsStream(Stream):
 
             for row in report.get("data", {}).get("rows", []):
                 record = {}
+
+                record["view_id"] = self.view_id
+
                 dimensions = row.get("dimensions", [])
                 dateRangeValues = row.get("metrics", [])
 
@@ -293,7 +306,7 @@ class GoogleAnalyticsStream(Stream):
                     else:
                         value = dimension
 
-                    record[header.replace("ga:", "ga_")] = value
+                    record[self._normalize_colname(header)] = value
 
                 for i, values in enumerate(dateRangeValues):
                     for metricHeader, value in zip(metricHeaders, values.get("values")):
@@ -307,12 +320,12 @@ class GoogleAnalyticsStream(Stream):
                         elif metric_type == "number":
                             value = float(value)
 
-                        record[metric_name.replace("ga:", "ga_")] = value
+                        record[self._normalize_colname(metric_name)] = value
 
                 # Also add the [start_date,end_date) used for the report
                 record["report_start_date"] = self.config.get("start_date")
                 record["report_end_date"] = self.end_date
-
+                
                 yield record
 
     @backoff.on_exception(
