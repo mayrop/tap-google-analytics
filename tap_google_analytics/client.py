@@ -436,7 +436,7 @@ class GoogleAnalyticsStream(Stream):
                 "dimension", dimension, self.dimensions_ref, self.metrics_ref
             )
 
-            dimension = dimension.replace("ga:", "ga_")
+            dimension = self._normalize_colname(dimension)
             properties.append(
                 th.Property(dimension, self._get_datatype(data_type), required=True)
             )
@@ -447,7 +447,7 @@ class GoogleAnalyticsStream(Stream):
             data_type = self._lookup_data_type(
                 "metric", metric, self.dimensions_ref, self.metrics_ref
             )
-            metric = metric.replace("ga:", "ga_")
+            metric = self._normalize_colname(metric)
             properties.append(th.Property(metric, self._get_datatype(data_type)))
 
         properties.append(
