@@ -310,6 +310,12 @@ class GoogleAnalyticsStream(Stream):
 
                     record[self._normalize_colname(header)] = value
 
+                    # appending ga_date with a diff date format
+                    if self._normalize_colname(header) == "ga_date":
+                        record["ga_date_dt"] = datetime.strptime(
+                            dimension, "%Y%m%d"
+                        ).strftime("%Y-%m-%d")
+
                 for i, values in enumerate(dateRangeValues):
                     for metricHeader, value in zip(metricHeaders, values.get("values")):
                         metric_name = metricHeader.get("name")
@@ -411,11 +417,20 @@ class GoogleAnalyticsStream(Stream):
         # Track if there is a date set as one of the Dimensions
         date_dimension_included = False
 
+        # Append {view_id} params for the report query
+        properties.append(th.Property("view_id", th.StringType(), required=True))
+
         # Add the dimensions to the schema and as key_properties
         for dimension in self.report["dimensions"]:
             if dimension == "ga:date":
                 date_dimension_included = True
                 self.replication_key = "ga_date"
+
+                # add ga_date as date, cause the PR is added as string
+                # don't want to modify that
+                properties.append(
+                    th.Property("ga_date_dt", th.DateTimeType(), required=True)
+                )
 
             data_type = self._lookup_data_type(
                 "dimension", dimension, self.dimensions_ref, self.metrics_ref
@@ -435,13 +450,11 @@ class GoogleAnalyticsStream(Stream):
             metric = metric.replace("ga:", "ga_")
             properties.append(th.Property(metric, self._get_datatype(data_type)))
 
-        # Also add the {view_id, start_date, end_date} params for the report query
-        properties.append(th.Property("view_id", th.StringType(), required=True))
         properties.append(
-            th.Property("report_start_date", th.StringType(), required=True)
+            th.Property("report_start_date", th.DateTimeType(), required=True)
         )
         properties.append(
-            th.Property("report_end_date", th.StringType(), required=True)
+            th.Property("report_end_date", th.DateTimeType(), required=True)
         )
 
         # If 'ga:date' has not been added as a Dimension, add the
