@@ -38,7 +38,6 @@ class GoogleAnalyticsStream(Stream):
         self.quota_user = self.config.get("quota_user", None)
         self.end_date = self._get_end_date()
         self.view_id = self.config["view_id"]
-        self.snake_case_cols = bool(self.config.get("snake_case_cols", False))
 
     def _get_end_date(self):
         end_date = self.config.get("end_date", datetime.utcnow().strftime("%Y-%m-%d"))
@@ -271,13 +270,10 @@ class GoogleAnalyticsStream(Stream):
     def _normalize_colname(self, colname: str) -> str:
         colname = colname.replace("ga:", "ga_")
 
-        if self.snake_case_cols:
-            # https://stackoverflow.com/questions/1175208/elegant-python-function-to-convert-camelcase-to-snake-case
-            return "".join(
-                ["_" + c.lower() if c.isupper() else c for c in colname]
-            ).lstrip("_")
-
-        return colname
+        # https://stackoverflow.com/questions/1175208/elegant-python-function-to-convert-camelcase-to-snake-case
+        return "".join(["_" + c.lower() if c.isupper() else c for c in colname]).lstrip(
+            "_"
+        )
 
     def _parse_response(self, response):
         report = response.get("reports", [])[0]
@@ -429,13 +425,12 @@ class GoogleAnalyticsStream(Stream):
                 # add ga_date as date, cause the PR is added as string
                 # don't want to modify that
                 properties.append(
-                    th.Property("ga_date_dt", th.DateTimeType(), required=True)
+                    th.Property("ga_date_dt", th.DateType(), required=True)
                 )
 
             data_type = self._lookup_data_type(
                 "dimension", dimension, self.dimensions_ref, self.metrics_ref
             )
-
             dimension = self._normalize_colname(dimension)
             properties.append(
                 th.Property(dimension, self._get_datatype(data_type), required=True)
@@ -451,11 +446,9 @@ class GoogleAnalyticsStream(Stream):
             properties.append(th.Property(metric, self._get_datatype(data_type)))
 
         properties.append(
-            th.Property("report_start_date", th.DateTimeType(), required=True)
+            th.Property("report_start_date", th.DateType(), required=True)
         )
-        properties.append(
-            th.Property("report_end_date", th.DateTimeType(), required=True)
-        )
+        properties.append(th.Property("report_end_date", th.DateType(), required=True))
 
         # If 'ga:date' has not been added as a Dimension, add the
         #  {start_date, end_date} params as keys
@@ -468,4 +461,5 @@ class GoogleAnalyticsStream(Stream):
             primary_keys.append("report_end_date")
 
         self.primary_keys = primary_keys
+
         return th.PropertiesList(*properties).to_dict()
