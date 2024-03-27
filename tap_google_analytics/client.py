@@ -38,6 +38,8 @@ class GoogleAnalyticsStream(Stream):
         self.quota_user = self.config.get("quota_user", None)
         self.end_date = self._get_end_date()
         self.view_id = self.config["view_id"]
+        self.page_size = self.config.get("page_size", 1000)
+        self.max_records = self.config.get("max_records", None)
 
     def _get_end_date(self):
         end_date = self.config.get("end_date", datetime.utcnow().strftime("%Y-%m-%d"))
@@ -128,7 +130,11 @@ class GoogleAnalyticsStream(Stream):
             for segment_id in report_def_raw["segments"]:
                 report_definition["segments"].append({"segmentId": segment_id})
 
+        if "samplingLevel" in report_def_raw:
+            report_definition["samplingLevel"] = report_def_raw["samplingLevel"]
+
         for key in ["dimension", "metric"]:
+            # https://stackoverflow.com/questions/38727095/core-reporting-api-how-to-use-multiple-dimensionfilterclauses-filters
             if not f"{key}FilterClauses" in report_def_raw:
                 continue
 
@@ -137,12 +143,14 @@ class GoogleAnalyticsStream(Stream):
             for clause in report_def_raw[f"{key}FilterClauses"].keys():
                 filters.append(
                     {
-                        f"{key}Name": clause,
-                        **report_def_raw[f"{key}FilterClauses"][clause],
+                        "filters": {
+                            f"{key}Name": clause,
+                            **report_def_raw[f"{key}FilterClauses"][clause],
+                        }
                     }
                 )
 
-            report_definition[f"{key}FilterClauses"] = [{"filters": filters}]
+            report_definition[f"{key}FilterClauses"] = filters
 
         if "orderBys" in report_def_raw:
             report_definition["orderBys"] = []
@@ -153,6 +161,10 @@ class GoogleAnalyticsStream(Stream):
                         "sortOrder": sort_order,
                     }
                 )
+
+        for key in ["page_size", "max_records"]:
+            if key in report_def_raw:
+                report_definition[key] = report_def_raw[key]
 
         return report_definition
 
@@ -227,9 +239,14 @@ class GoogleAnalyticsStream(Stream):
         """
         next_page_token: Any = None
         finished = False
+        total_records = 0
 
         state_filter = self._get_state_filter(context)
         api_report_def = self._generate_report_definition(self.report)
+
+        page_size = self.report.get("page_size", self.page_size)
+        max_records = self.report.get("max_records", self.max_records)
+
         while not finished:
             resp = self._request_data(
                 api_report_def,
@@ -240,13 +257,33 @@ class GoogleAnalyticsStream(Stream):
                 yield row
             previous_token = copy.deepcopy(next_page_token)
             next_page_token = self._get_next_page_token(response=resp)
+            total_records += page_size
             if next_page_token and next_page_token == previous_token:
                 raise RuntimeError(
                     f"Loop detected in pagination. "
                     f"Pagination token {next_page_token} is identical to prior token."
                 )
+
             # Cycle until get_next_page_token() no longer returns a value
-            finished = not next_page_token
+            finished = self._is_finished(next_page_token, total_records, max_records)
+
+            self.logger.info(f"Total records: {total_records}")
+            self.logger.info(f"Max records: {max_records}")
+            self.logger.info(f"Finished: {finished}")
+
+    def _is_finished(
+        self, next_page_token: Any, total_records: int, max_records: int | None
+    ) -> bool:
+        # if there's not an additional page, no need to check anything else
+        if not next_page_token:
+            return True
+
+        # If we don't have a setting for max records, it means we need to keep checking
+        if max_records is None:
+            return False
+
+        # If we have more records than the max, we're done
+        return total_records >= max_records
 
     def _get_next_page_token(self, response: dict) -> Any:  # noqa: D417
         """Return token identifying next page or None if all records have been read.
@@ -312,6 +349,16 @@ class GoogleAnalyticsStream(Stream):
                             dimension, "%Y%m%d"
                         ).strftime("%Y-%m-%d")
 
+                    # appending ga_date if yearMonth present (grouping by month)
+                    if self._normalize_colname(header) == "ga_year_month":
+                        record["ga_date"] = datetime.strptime(
+                            dimension, "%Y%m"
+                        ).strftime("%Y%m01")
+
+                        record["ga_date_dt"] = datetime.strptime(
+                            record["ga_date"], "%Y%m%d"
+                        ).strftime("%Y-%m-%d")
+
                 for i, values in enumerate(dateRangeValues):
                     for metricHeader, value in zip(metricHeaders, values.get("values")):
                         metric_name = metricHeader.get("name")
@@ -350,7 +397,7 @@ class GoogleAnalyticsStream(Stream):
                     "dateRanges": [
                         {"startDate": state_filter, "endDate": self.end_date}
                     ],
-                    "pageSize": "1000",
+                    "pageSize": report_definition.get("page_size", self.page_size),
                     "pageToken": pageToken,
                     "metrics": report_definition["metrics"],
                     "dimensions": report_definition["dimensions"],
@@ -366,6 +413,11 @@ class GoogleAnalyticsStream(Stream):
         ]:
             if key in report_definition:
                 body["reportRequests"][0][key] = report_definition[key]
+
+        if "samplingLevel" in report_definition:
+            body["reportRequests"][0]["samplingLevel"] = report_definition[
+                "samplingLevel"
+            ]
 
         return (
             self.analytics.reports()
@@ -424,6 +476,23 @@ class GoogleAnalyticsStream(Stream):
 
                 # add ga_date as date, cause the PR is added as string
                 # don't want to modify that
+                properties.append(
+                    th.Property("ga_date_dt", th.DateType(), required=True)
+                )
+
+            # for the sake of grouping by month (lots of data)
+            # hardcoding this solution
+            if dimension == "ga:yearMonth":
+                date_dimension_included = True
+                self.replication_key = "ga_date"
+
+                # add ga_date as date, cause the PR is added as string
+                primary_keys.append("ga_date")
+
+                properties.append(
+                    th.Property("ga_date", th.StringType(), required=True)
+                )
+
                 properties.append(
                     th.Property("ga_date_dt", th.DateType(), required=True)
                 )
