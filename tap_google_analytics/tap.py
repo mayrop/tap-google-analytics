@@ -277,6 +277,8 @@ class TapGoogleAnalytics(Tap):
                         devguides/reporting/core/dimsmets"
                 )
                 sys.exit(1)
+                
+        # check if ga:date and ga:yearMonth are provided
 
     def _validate_metrics(self, metrics):
         # check that all the metrics are proper Google Analytics metrics
@@ -335,7 +337,7 @@ class TapGoogleAnalytics(Tap):
                 ga_report=report,
                 ga_dimensions_ref=self.dimensions_ref,
                 ga_metrics_ref=self.metrics_ref,
-                ga_analytics_client=self.analytics,
+                ga_analytics_client=self.analytics
             )
             stream_list.append(stream)
         return stream_list

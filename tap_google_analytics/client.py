@@ -22,7 +22,6 @@ from tap_google_analytics.error import (
     is_fatal_error,
 )
 
-
 class GoogleAnalyticsStream(Stream):
     """Stream class for GoogleAnalytics streams."""
 
@@ -141,17 +140,15 @@ class GoogleAnalyticsStream(Stream):
             filters = []
 
             for clause in report_def_raw[f"{key}FilterClauses"].keys():
-                filters.append(
-                    {
-                        "filters": {
-                            f"{key}Name": clause,
-                            **report_def_raw[f"{key}FilterClauses"][clause],
-                        }
+                filters.append({
+                    "filters": {
+                        f"{key}Name": clause,
+                        **report_def_raw[f"{key}FilterClauses"][clause],
                     }
-                )
+                })
 
             report_definition[f"{key}FilterClauses"] = filters
-
+            
         if "orderBys" in report_def_raw:
             report_definition["orderBys"] = []
             for clause, sort_order in report_def_raw["orderBys"].items():
@@ -243,7 +240,7 @@ class GoogleAnalyticsStream(Stream):
 
         state_filter = self._get_state_filter(context)
         api_report_def = self._generate_report_definition(self.report)
-
+        
         page_size = self.report.get("page_size", self.page_size)
         max_records = self.report.get("max_records", self.max_records)
 
@@ -271,9 +268,8 @@ class GoogleAnalyticsStream(Stream):
             self.logger.info(f"Max records: {max_records}")
             self.logger.info(f"Finished: {finished}")
 
-    def _is_finished(
-        self, next_page_token: Any, total_records: int, max_records: int | None
-    ) -> bool:
+
+    def _is_finished(self, next_page_token: Any, total_records: int, max_records: int | None) -> bool:
         # if there's not an additional page, no need to check anything else
         if not next_page_token:
             return True
@@ -308,9 +304,9 @@ class GoogleAnalyticsStream(Stream):
         colname = colname.replace("ga:", "ga_")
 
         # https://stackoverflow.com/questions/1175208/elegant-python-function-to-convert-camelcase-to-snake-case
-        return "".join(["_" + c.lower() if c.isupper() else c for c in colname]).lstrip(
-            "_"
-        )
+        return "".join(
+            ["_" + c.lower() if c.isupper() else c for c in colname]
+        ).lstrip("_")
 
     def _parse_response(self, response):
         report = response.get("reports", [])[0]
@@ -413,11 +409,9 @@ class GoogleAnalyticsStream(Stream):
         ]:
             if key in report_definition:
                 body["reportRequests"][0][key] = report_definition[key]
-
+                
         if "samplingLevel" in report_definition:
-            body["reportRequests"][0]["samplingLevel"] = report_definition[
-                "samplingLevel"
-            ]
+            body["reportRequests"][0]["samplingLevel"] = report_definition["samplingLevel"]
 
         return (
             self.analytics.reports()
@@ -488,11 +482,11 @@ class GoogleAnalyticsStream(Stream):
 
                 # add ga_date as date, cause the PR is added as string
                 primary_keys.append("ga_date")
-
+                
                 properties.append(
                     th.Property("ga_date", th.StringType(), required=True)
                 )
-
+                
                 properties.append(
                     th.Property("ga_date_dt", th.DateType(), required=True)
                 )
@@ -517,7 +511,9 @@ class GoogleAnalyticsStream(Stream):
         properties.append(
             th.Property("report_start_date", th.DateType(), required=True)
         )
-        properties.append(th.Property("report_end_date", th.DateType(), required=True))
+        properties.append(
+            th.Property("report_end_date", th.DateType(), required=True)
+        )
 
         # If 'ga:date' has not been added as a Dimension, add the
         #  {start_date, end_date} params as keys
