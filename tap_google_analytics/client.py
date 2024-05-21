@@ -321,6 +321,7 @@ class GoogleAnalyticsStream(Stream):
                 record = {}
 
                 record["view_id"] = self.view_id
+                record["stream"] = self.name
 
                 dimensions = row.get("dimensions", [])
                 dateRangeValues = row.get("metrics", [])
@@ -333,7 +334,7 @@ class GoogleAnalyticsStream(Stream):
                     if data_type == "integer":
                         value = int(dimension)
                     elif data_type == "number":
-                        value = float(dimension)
+                        value = round(float(dimension), 10)
                     else:
                         value = dimension
 
@@ -365,7 +366,7 @@ class GoogleAnalyticsStream(Stream):
                         if metric_type == "integer":
                             value = int(value)
                         elif metric_type == "number":
-                            value = float(value)
+                            value = round(float(value), 10)
 
                         record[self._normalize_colname(metric_name)] = value
 
@@ -461,6 +462,7 @@ class GoogleAnalyticsStream(Stream):
 
         # Append {view_id} params for the report query
         properties.append(th.Property("view_id", th.StringType(), required=True))
+        properties.append(th.Property("stream", th.StringType(), required=True))
 
         # Add the dimensions to the schema and as key_properties
         for dimension in self.report["dimensions"]:
